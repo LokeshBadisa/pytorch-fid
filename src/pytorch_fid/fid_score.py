@@ -111,7 +111,7 @@ class ImagePathDataset(torch.utils.data.Dataset):
 
 
 def get_activations(
-    files, model, batch_size=50, dims=2048, device="cpu", num_workers=1
+    images, model, batch_size=50, dims=2048, device="cpu", num_workers=1
 ):
     """Calculates the activations of the pool_3 layer for all images.
 
@@ -134,16 +134,16 @@ def get_activations(
     """
     model.eval()
 
-    if batch_size > len(files):
+    if batch_size > len(images):
         print(
             (
                 "Warning: batch size is bigger than the data size. "
                 "Setting batch size to data size"
             )
         )
-        batch_size = len(files)
+        batch_size = len(images)
 
-    dataset = ImagePathDataset(files, transforms=TF.ToTensor())
+    dataset = torch.utils.data.TensorDataset(images)
     dataloader = torch.utils.data.DataLoader(
         dataset,
         batch_size=batch_size,
@@ -152,12 +152,13 @@ def get_activations(
         num_workers=num_workers,
     )
 
-    pred_arr = np.empty((len(files), dims))
+    pred_arr = np.empty((len(images), dims))
 
     start_idx = 0
 
     for batch in tqdm(dataloader):
-        batch = batch.to(device)
+        batch = torch.cat(batch).to(device)
+        
 
         with torch.no_grad():
             pred = model(batch)[0]
@@ -319,6 +320,40 @@ def save_fid_stats(paths, batch_size, device, dims, num_workers=1):
 
     np.savez_compressed(paths[1], mu=m1, sigma=s1)
 
+
+class FID_Evaluator:
+    def __init__(self, batch_size, device, dims, num_workers=1):
+        self.batch_size = batch_size
+        self.device = device
+        self.dims = dims
+        self.num_workers = num_workers
+        self.generated = []
+        self.real = []
+
+        block_idx = InceptionV3.BLOCK_INDEX_BY_DIM[dims]
+
+        self.model = InceptionV3([block_idx]).to(device)
+
+    def add_sample(self, generated, real):
+        self.generated.append(generated)
+        self.real.append(real)
+
+    def get_fid(self):
+        self.generated = torch.cat(self.generated, 0)
+        self.real = torch.cat(self.real, 0)
+        
+        m1, s1 = calculate_activation_statistics(
+            self.generated, self.model, self.batch_size, self.dims, self.device, self.num_workers
+        )
+        m2, s2 = calculate_activation_statistics(
+            self.real, self.model, self.batch_size, self.dims, self.device, self.num_workers
+        )
+        fid_value = calculate_frechet_distance(m1, s1, m2, s2)
+        return fid_value
+
+    def clear(self):
+        self.generated = []
+        self.real = []
 
 def main():
     args = parser.parse_args()

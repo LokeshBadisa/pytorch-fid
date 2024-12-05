@@ -1,5 +1,8 @@
 [![PyPI](https://img.shields.io/pypi/v/pytorch-fid.svg)](https://pypi.org/project/pytorch-fid/)
 
+-> This fork changes input format from files to tensor. This helps in escaping the latency which occurs due to file save & file write of images. <-
+
+
 # FID score for PyTorch
 
 This is a port of the official implementation of [Fréchet Inception Distance](https://arxiv.org/abs/1706.08500) to PyTorch.
